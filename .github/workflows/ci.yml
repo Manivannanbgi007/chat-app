@@ -114,7 +114,7 @@ jobs:
     needs: [backend, frontend]
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Create a throw-away .env (CI only, random values)
         run: bash infra/init-env.sh
       - name: Build every image
