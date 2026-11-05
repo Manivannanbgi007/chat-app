@@ -13,7 +13,7 @@ const password = z
   .regex(/\d/, 'Password must contain a number')
 
 export const loginSchema = z.object({
-  identifier: z.string().trim().min(1, 'Enter your email or phone number'),
+  identifier: z.string().trim().min(1, 'Enter your email, phone number or username'),
   password: z.string().min(1, 'Enter your password'),
   rememberMe: z.boolean(),
 })

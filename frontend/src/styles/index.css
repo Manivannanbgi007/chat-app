@@ -99,6 +99,11 @@
 }
 
 /* ---- base ---- */
+/* Everything is sized in rem, so this one value scales the whole app: 15px instead of the browser's 16px. */
+html {
+  font-size: 15px;
+}
+
 html,
 body,
 #root {

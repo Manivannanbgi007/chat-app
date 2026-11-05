@@ -52,7 +52,7 @@ Items are newest-first per page; the client reverses for display. `after=<cursor
 | POST | /api/auth/register | `{ username, email, phone?, password, displayName }` | 201 `{ userId, email, verificationRequired: true }` | 409: `EMAIL_TAKEN`, `PHONE_TAKEN`, `USERNAME_TAKEN` | yes |
 | POST | /api/auth/verify-otp | `{ identifier, otp, purpose: "EMAIL_VERIFY" }` | 200 `null` | 400: `INVALID_OTP`; 429: `OTP_ATTEMPTS_EXCEEDED` | yes |
 | POST | /api/auth/resend-otp | `{ identifier, purpose: "EMAIL_VERIFY" }` | 200 `null` (same answer for unknown identifiers) | 429: `OTP_RATE_LIMITED` | yes |
-| POST | /api/auth/login | `{ identifier (email or phone), password, deviceName? }` | 200 `AuthTokens` (below) | 401: `INVALID_CREDENTIALS`; 403: `EMAIL_NOT_VERIFIED`; 423: `ACCOUNT_LOCKED` | yes |
+| POST | /api/auth/login | `{ identifier (email, phone number or username), password, deviceName? }` | 200 `AuthTokens` (below) | 401: `INVALID_CREDENTIALS`; 403: `EMAIL_NOT_VERIFIED`; 423: `ACCOUNT_LOCKED` | yes |
 | POST | /api/auth/refresh | `{ refreshToken }` | 200 `AuthTokens` | 401: `INVALID_REFRESH_TOKEN` | yes |
 | POST | /api/auth/logout | `{ refreshToken }` (ends that device session; always 200) | 200 `null` | | yes |
 | POST | /api/auth/forgot-password | `{ identifier }` | 200 `null` (always, no user enumeration; emails a reset link) | | yes |

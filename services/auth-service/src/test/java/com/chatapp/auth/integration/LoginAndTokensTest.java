@@ -71,6 +71,23 @@ class LoginAndTokensTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void canLoginWithTheUsernameToo() throws Exception {
+        TestUser user = register();
+        assertStatus(postJson("/api/auth/verify-otp",
+                Map.of("identifier", user.email(), "otp", emails.lastCodeFor(user.email()), "purpose", "EMAIL_VERIFY")), 200);
+
+        // as typed, and in other capital letters: usernames are not case sensitive
+        assertStatus(postJson("/api/auth/login", Map.of("identifier", user.username(), "password", PASSWORD)), 200);
+        assertStatus(postJson("/api/auth/login", Map.of("identifier", user.username().toUpperCase(), "password", PASSWORD)), 200);
+        // a wrong password and an unknown username give the same answer as always (no way to find out which usernames exist)
+        MvcResult wrong = postJson("/api/auth/login", Map.of("identifier", user.username(), "password", "Wrong-pass-1"));
+        MvcResult unknown = postJson("/api/auth/login", Map.of("identifier", "nobody_" + user.username(), "password", "Wrong-pass-1"));
+        assertStatus(wrong, 401);
+        assertStatus(unknown, 401);
+        assertThat(field(wrong, "$.data.errorCode")).isEqualTo(field(unknown, "$.data.errorCode")).isEqualTo("INVALID_CREDENTIALS");
+    }
+
+    @Test
     void unverifiedEmailCannotLogin() throws Exception {
         TestUser user = register();
 

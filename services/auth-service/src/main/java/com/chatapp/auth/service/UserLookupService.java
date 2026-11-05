@@ -7,7 +7,7 @@ import com.chatapp.auth.entity.AuthUser;
 import com.chatapp.auth.repository.AuthUserRepository;
 import org.springframework.stereotype.Service;
 
-/** Finds a user by "identifier": an email address (contains @) or a phone number. */
+/** Finds a user by "identifier": an email address (contains @), a phone number, or the username. */
 @Service
 public class UserLookupService {
 
@@ -22,6 +22,14 @@ public class UserLookupService {
         if (value.contains("@")) {
             return repository.findByEmail(value.toLowerCase(Locale.ROOT));
         }
-        return repository.findByPhone(value);
+        // Something that looks like a phone number is tried as a phone number first (a username may also be all digits).
+        if (value.matches("[+]?[0-9 ()-]{6,}")) {
+            Optional<AuthUser> byPhone = repository.findByPhone(value);
+            if (byPhone.isPresent()) {
+                return byPhone;
+            }
+        }
+        // Usernames are stored in lower case (see RegistrationService).
+        return repository.findByUsername(value.toLowerCase(Locale.ROOT));
     }
 }

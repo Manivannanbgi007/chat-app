@@ -152,5 +152,12 @@ Request: a clean, modern notification popup in both switch states; only one rele
 - [x] Verified: 604 unit tests (8 new / changed), `tsc -b`, and 10 Playwright specs incl. the new `notification-switches.spec.ts` (panel fully inside the window, one state at a time, click opens the group, switches saved after a reload, note appears and disappears); screenshots checked in light and dark for every state
 - Not done: the operating-system pop-up itself (the small window of Windows / macOS) cannot be screenshotted or clicked by an automated browser test; its click handler and the switch rules are unit-tested, the visual was not seen. Real push to a closed browser still needs FCM
 
+## Phase 12: Login by username and gateway address cache (user report; DONE, waiting for review)
+Report: login with the username `mani_2776` and the right password gave "Incorrect email/phone or password".
+- [x] Cause: login only looked users up by e-mail or phone; the username was never searched (the password was right: the same login by e-mail worked). It was reported twice, so it is now supported: login, verify and forgot-password accept the e-mail, the phone number OR the username (not case sensitive; something that looks like a phone number is tried as a phone first). Wrong password and unknown username still give the identical 401, so usernames cannot be probed. The form hints "You can also type your username.", the error says "email, phone, username or password"
+- [x] Found while testing it: after auth-service was rebuilt every login answered 503 for 10+ minutes. The gateway remembered the OLD container address (Docker's DNS says "valid for 10 minutes") and got "connection refused". That would have hit every deployment. Fixed: the gateway forgets a service address after 5 seconds (`HttpClientConfig`, `chatapp.gateway.dns-cache-seconds`). Proven live: auth-service recreated, logins 503 for about 8 seconds, then 200 again without touching the gateway
+- [x] Verified: auth-service 58 tests (new: username login, capitals, same answer for wrong password and unknown name), gateway 38, frontend 604 unit tests, `security-check.py` 103/103, 10 Playwright specs; live: username, capitals and e-mail give 200, wrong password and unknown username give 401
+- Not done: no automatic test for the DNS fix (it needs a container with a changing address; it was proven by hand, see above)
+
 ## Not in scope (until explicitly planned)
 Group calls (SFU), end-to-end encryption, Google OAuth, Avro/Schema Registry, Kubernetes.

@@ -71,7 +71,7 @@ export default function LoginPage() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <FormField label="Email or phone number" htmlFor="identifier" error={errors.identifier?.message}>
+        <FormField label="Email or phone number" htmlFor="identifier" error={errors.identifier?.message} hint="You can also type your username.">
           <input id="identifier" autoComplete="username" className={inputClass} {...register('identifier')} />
         </FormField>
 

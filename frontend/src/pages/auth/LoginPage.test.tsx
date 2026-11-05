@@ -38,7 +38,7 @@ describe('LoginPage', () => {
     renderLogin()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Log in' }))
 
-    expect(await screen.findByText('Enter your email or phone number')).toBeInTheDocument()
+    expect(await screen.findByText('Enter your email, phone number or username')).toBeInTheDocument()
     expect(screen.getByText('Enter your password')).toBeInTheDocument()
     expect(mockedLogin).not.toHaveBeenCalled()
   })
@@ -82,7 +82,7 @@ describe('LoginPage', () => {
     const user = await fillAndSubmit()
     await user.click(screen.getByRole('button', { name: 'Log in' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect email/phone or password.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect email, phone, username or password.')
   })
 
   it('shows a message when the account is locked', async () => {

@@ -52,7 +52,7 @@ export default function ForgotPasswordPage() {
             </div>
           )}
           <form onSubmit={handleSubmit(onSubmit)} noValidate>
-            <FormField label="Email or phone number" htmlFor="identifier" error={errors.identifier?.message}>
+            <FormField label="Email or phone number" htmlFor="identifier" hint="You can also type your username." error={errors.identifier?.message}>
               <input id="identifier" autoComplete="username" className={inputClass} {...register('identifier')} />
             </FormField>
             <SubmitButton loading={isSubmitting}>Send reset link</SubmitButton>
