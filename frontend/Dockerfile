@@ -1,5 +1,5 @@
 # ---- Stage 1: build the React app ----
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 # Copy package files first so Docker can cache the npm install layer.
