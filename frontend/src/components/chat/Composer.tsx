@@ -1,5 +1,5 @@
 import { Mic, Send } from 'lucide-react'
-import { useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type KeyboardEvent, type Ref } from 'react'
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type Ref } from 'react'
 import type { AttachmentInput } from '../../features/media/attachmentActions'
 import { MEDIA_RULES, acceptAttribute, guessKind, validateFile } from '../../features/media/mediaRules'
 import { useVoiceRecorder, type VoiceResult } from '../../features/media/useVoiceRecorder'
@@ -8,6 +8,7 @@ import { webSocketManager } from '../../services/websocket/websocketManager'
 import type { MediaKind } from '../../types/chat'
 import AttachMenu from './AttachMenu'
 import AttachmentPreviewTray from './AttachmentPreviewTray'
+import EmojiButton from './EmojiButton'
 import VoiceRecorderBar from './VoiceRecorderBar'
 
 const MAX_LENGTH = 4000
@@ -88,6 +89,15 @@ export default function Composer({
     setPicked(null)
   }
 
+  // The caret is moved after an emoji was added (React sets the new text first).
+  const caretRef = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    if (caretRef.current !== null && textareaRef.current) {
+      textareaRef.current.setSelectionRange(caretRef.current, caretRef.current)
+      caretRef.current = null
+    }
+  }, [text])
+
   const canSend = picked !== null || text.trim().length > 0
 
   function handleChange(value: string) {
@@ -97,6 +107,17 @@ export default function Composer({
     } else {
       typingSender.keystroke()
     }
+  }
+
+  // An emoji from the picker goes where the cursor is (or replaces the selected text).
+  function insertEmoji(emoji: string) {
+    const field = textareaRef.current
+    const start = field?.selectionStart ?? text.length
+    const end = field?.selectionEnd ?? start
+    const next = text.slice(0, start) + emoji + text.slice(end)
+    if (next.length > MAX_LENGTH) return
+    caretRef.current = start + emoji.length
+    handleChange(next)
   }
 
   function send() {
@@ -195,6 +216,7 @@ export default function Composer({
         ) : (
           <>
             <AttachMenu onPick={(kind) => inputRefs.current[kind]?.click()} />
+            <EmojiButton onPick={insertEmoji} onClose={() => textareaRef.current?.focus()} />
             <textarea
               ref={textareaRef}
               value={text}

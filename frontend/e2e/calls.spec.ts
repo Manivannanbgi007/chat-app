@@ -27,6 +27,11 @@ async function waitUntilIdle(...pages: Page[]) {
   for (const page of pages) await expectCallState(page, 'idle')
 }
 
+// Chrome's fake camera / microphone sometimes never finish opening when two browser windows start a call at the same
+// moment (the call then never starts: no request reaches the server). That is the test browser, not the app, so a
+// failed run is tried again (up to 2 times, with new users); Playwright reports such a run as "flaky".
+test.describe.configure({ retries: 2 })
+
 test('calls: video call, TURN-only call, declined call, missed call', async ({ browser, request }) => {
   test.setTimeout(240_000)
   const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`

@@ -208,6 +208,13 @@ Contract: API_DOCUMENTATION.md 7.4. Page: `pages/status/StatusPage.tsx`, parts i
 - **A gotcha worth knowing:** an animation that ends in a `transform` keeps that transform, and a `position: fixed` dialog inside such an element is positioned against it instead of the window (the sidebar was not dimmed). The animations therefore use `animation-fill-mode: backwards`, and the page wrapper animates only opacity.
 - **Look at it without clicking:** `node e2e/tools/ui-screenshots.mjs <label> [desktop|laptop|tablet|phone]` (every screen, light and dark, into `ui-screenshots/<label>/`), `node e2e/tools/ui-interactions.mjs` (menus, dialogs, calls, stories) and `node e2e/tools/ui-menu-toggle.mjs` (opens and closes the menu, checks the widths and that the choice survives a reload) and `node e2e/tools/ui-fit-check.mjs`, which fails when any screen scrolls sideways or the frame is not exactly the window size (6 sizes from 320 px to 2560 px wide, all 8 screens). They log in with the accounts of `infra/DEMO_ACCOUNTS.md`.
 
+## Emoji (Phase 13)
+- **Picker:** `components/chat/EmojiButton.tsx` (the smiley next to the paperclip). Data: `features/emoji/emojiData.ts`, one line per emoji ("😀 grinning face happy": the text is the name AND what the search looks at); add a line to add an emoji. Groups, tabs, search (all typed words must match), and a "recently used" tab kept in `localStorage` (`chat-app-recent-emoji`, 24 emoji).
+- **Insert at the cursor:** `Composer.tsx` `insertEmoji` uses the text box's selection (a selected piece is replaced) and puts the cursor behind the new emoji; it refuses to go over the 4000 characters.
+- **Big emoji:** `bigEmojiCount` in `features/emoji/emojiText.ts` (graphemes via `Intl.Segmenter`) says when a message is only 1-3 emoji; `MessageBubble.tsx` then draws it big without a bubble.
+- **Not in the picker on purpose:** country flags (Windows draws two letters instead).
+- `node e2e/tools/ui-emoji.mjs` takes screenshots of the picker and of emoji messages.
+
 ## End-to-end tests (Playwright)
 `e2e/chat.spec.ts` runs two real browser windows against the **running stack**: it registers two users through the API (reading the email code from MailHog), logs both in through the UI, starts a conversation from the contacts page, sends a message, and checks live delivery, the unread badge, the delivered and read ticks, a reply, the typing indicator (soft check) and that the history survives a reload.
 

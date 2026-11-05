@@ -1,5 +1,6 @@
 import { Info } from 'lucide-react'
 import { displayStatus } from '../../features/messaging/messageMerge'
+import { bigEmojiCount } from '../../features/emoji/emojiText'
 import { formatClock } from '../../features/messaging/conversationList'
 import type { ChatMessage } from '../../types/chat'
 import MessageAttachment from './MessageAttachment'
@@ -34,14 +35,19 @@ export default function MessageBubble({
   const hasAttachment = !!message.attachment
   // Text messages always show their text; media messages only show a caption when there is one.
   const showText = !hasAttachment || message.content.trim().length > 0
+  // A message that is only 1-3 emoji is shown BIG, without a coloured bubble (the fewer, the bigger).
+  const bigEmoji = !hasAttachment && message.type === 'TEXT' ? bigEmojiCount(message.content) : null
+  const bigSize = bigEmoji === 1 ? 'text-6xl' : bigEmoji === 2 ? 'text-5xl' : 'text-4xl'
 
   return (
     <div className={`flex animate-bubble-in ${mine ? 'justify-end' : 'justify-start'}`} data-testid="message">
       <div
-        className={`max-w-[85%] rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-[75%] xl:max-w-[60%] ${
-          mine
-            ? 'rounded-br-md bg-gradient-to-br from-brand-500 to-brand-700 text-white [&_[aria-label=Read]]:text-sky-200'
-            : 'rounded-bl-md bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100'
+        className={`max-w-[85%] rounded-2xl px-3.5 py-2 sm:max-w-[75%] xl:max-w-[60%] ${
+          bigEmoji !== null
+            ? 'bg-transparent text-gray-900 dark:text-gray-100'
+            : mine
+              ? 'rounded-br-md bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm [&_[aria-label=Read]]:text-sky-200'
+              : 'rounded-bl-md bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-gray-100'
         }`}
       >
         {sender && <p className={`mb-0.5 text-xs font-semibold ${sender.colourClass}`}>{sender.name}</p>}
@@ -73,8 +79,10 @@ export default function MessageBubble({
             </div>
           </div>
         )}
-        {showText && <p className={`whitespace-pre-wrap break-words ${hasAttachment ? 'mt-1' : ''}`}>{message.content}</p>}
-        <div className={`mt-0.5 flex items-center justify-end gap-1 text-[11px] ${mine ? 'text-white/75' : 'text-gray-400 dark:text-gray-400'}`}>
+        {showText && (
+          <p className={`whitespace-pre-wrap break-words ${hasAttachment ? 'mt-1' : ''} ${bigEmoji !== null ? `${bigSize} leading-tight` : ''}`}>{message.content}</p>
+        )}
+        <div className={`mt-0.5 flex items-center justify-end gap-1 text-[11px] ${mine && bigEmoji === null ? 'text-white/75' : 'text-gray-400 dark:text-gray-400'}`}>
           {onShowInfo && mine && !message.localStatus && (
             <button
               type="button"

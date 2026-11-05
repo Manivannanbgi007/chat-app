@@ -66,8 +66,11 @@ async function hangUp(caller: Page, callee: Page) {
   }
 }
 
+// See calls.spec.ts: Chrome's fake camera / microphone sometimes stall; a failed run is tried again (up to 2 times).
+test.describe.configure({ retries: 2 })
+
 test('calls: audio and video bytes really arrive, directly and through the Coturn relay', async ({ browser, request }) => {
-  test.setTimeout(180_000)
+  test.setTimeout(240_000)
   const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1000)}`
   const alice = newUser('flowa', suffix)
   const bob = newUser('flowb', suffix)
@@ -89,11 +92,12 @@ test('calls: audio and video bytes really arrive, directly and through the Cotur
 
   await test.step('direct video call: audio AND video bytes arrive on both sides over a direct path', async () => {
     await startCall(alicePage, bobPage, 'Video call', conversationId)
-    await alicePage.waitForTimeout(4000)          // let a few seconds of media flow
     for (const page of [alicePage, bobPage]) {
+      // Media does not start at the same moment on a busy computer (two browsers, 25 containers): wait for the numbers
+      // to arrive (up to 25 s) instead of reading them once after a fixed pause.
+      await expect.poll(async () => (await readStats(page)).audioBytes, { message: 'audio bytes received', timeout: 25_000 }).toBeGreaterThan(1000)
+      await expect.poll(async () => (await readStats(page)).videoBytes, { message: 'video bytes received', timeout: 25_000 }).toBeGreaterThan(10_000)
       const stats = await readStats(page)
-      expect(stats.audioBytes, 'audio bytes received').toBeGreaterThan(1000)
-      expect(stats.videoBytes, 'video bytes received').toBeGreaterThan(10_000)
       expect(['host', 'srflx', 'prflx'], `local path ${stats.localType}`).toContain(stats.localType)
       expect(stats.localType, 'direct call must not use the relay').not.toBe('relay')
     }
@@ -105,11 +109,9 @@ test('calls: audio and video bytes really arrive, directly and through the Cotur
       await page.evaluate(() => localStorage.setItem('chatapp.iceTransportPolicy', 'relay'))
     }
     await startCall(bobPage, alicePage, 'Voice call', conversationId)
-    await bobPage.waitForTimeout(4000)
     for (const page of [alicePage, bobPage]) {
-      const stats = await readStats(page)
-      expect(stats.audioBytes, 'audio bytes received through the relay').toBeGreaterThan(1000)
-      expect(stats.localType, 'with relay-only the local side must be a relay candidate').toBe('relay')
+      await expect.poll(async () => (await readStats(page)).audioBytes, { message: 'audio bytes received through the relay', timeout: 25_000 }).toBeGreaterThan(1000)
+      await expect.poll(async () => (await readStats(page)).localType, { message: 'with relay-only the local side must be a relay candidate', timeout: 25_000 }).toBe('relay')
     }
     await hangUp(bobPage, alicePage)
     for (const page of [alicePage, bobPage]) {

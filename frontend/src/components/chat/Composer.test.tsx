@@ -325,3 +325,80 @@ describe('Composer voice notes', () => {
     expect(state.clearError).toHaveBeenCalled()
   })
 })
+
+// Finds an emoji with the search box of the open picker and clicks it.
+async function choose(user: ReturnType<typeof userEvent.setup>, name: string) {
+  const search = screen.getByRole('searchbox', { name: 'Search emoji' })
+  await user.clear(search)
+  await user.type(search, name)
+  await user.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }))
+}
+
+describe('Composer: emoji', () => {
+  it('an emoji from the picker goes where the cursor is, and the message is sent with it', async () => {
+    const onSend = vi.fn()
+    render(<Composer conversationId="c1" onSend={onSend} />)
+    const user = userEvent.setup()
+    const box = screen.getByLabelText('Message') as HTMLTextAreaElement
+
+    await user.type(box, 'Hello world')
+    box.setSelectionRange(5, 5) // the cursor sits between "Hello" and " world"
+    await user.click(screen.getByRole('button', { name: 'Add emoji' }))
+    await choose(user, 'red heart')
+
+    expect(box).toHaveValue('Hello\u2764\uFE0F world')
+    expect(box.selectionStart).toBe('Hello\u2764\uFE0F'.length) // the cursor is after the new emoji
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(onSend).toHaveBeenCalledWith('Hello\u2764\uFE0F world')
+  })
+
+  it('several emoji can be added; the panel stays open until Escape', async () => {
+    render(<Composer conversationId="c1" onSend={vi.fn()} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Add emoji' }))
+    await choose(user, 'thumbs up')
+    await choose(user, 'fire hot')
+
+    expect(screen.getByLabelText('Message')).toHaveValue('\u{1F44D}\u{1F525}')
+    expect(screen.getByRole('dialog', { name: 'Emoji' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Emoji' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Message')).toHaveFocus() // back in the box, ready to type
+  })
+
+  it('a selected piece of text is replaced by the emoji', async () => {
+    render(<Composer conversationId="c1" onSend={vi.fn()} />)
+    const user = userEvent.setup()
+    const box = screen.getByLabelText('Message') as HTMLTextAreaElement
+
+    await user.type(box, 'good bad')
+    box.setSelectionRange(5, 8)
+    await user.click(screen.getByRole('button', { name: 'Add emoji' }))
+    await choose(user, 'thumbs up')
+
+    expect(box).toHaveValue('good \u{1F44D}')
+  })
+
+  it('does not go beyond the 4000 character limit', async () => {
+    render(<Composer conversationId="c1" onSend={vi.fn()} />)
+    const user = userEvent.setup()
+    const box = screen.getByLabelText('Message') as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: 'a'.repeat(3999) } })
+
+    await user.click(screen.getByRole('button', { name: 'Add emoji' }))
+    await choose(user, 'thumbs up') // 2 characters: would be 4001
+
+    expect(box.value).toHaveLength(3999)
+  })
+
+  it('adding an emoji tells the other person "typing..." like any other text', async () => {
+    render(<Composer conversationId="c1" onSend={vi.fn()} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: 'Add emoji' }))
+    await user.click(screen.getByRole('button', { name: /^grinning face/ }))
+
+    expect(publish).toHaveBeenCalledWith('/app/chat.typing', { conversationId: 'c1', typing: true })
+  })
+})

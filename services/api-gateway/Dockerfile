@@ -41,7 +41,7 @@ EXPOSE 8200
 # therefore moved to a second port (8290) that is never published; port 8200 only serves the API.
 ENV SPRING_PROFILES_ACTIVE=prod \
     MANAGEMENT_SERVER_PORT=8290 \
-    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Dsun.net.inetaddr.ttl=5 -Dsun.net.inetaddr.negative.ttl=1"
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
   CMD wget -qO- http://localhost:8290/actuator/health/readiness | grep -q UP || exit 1
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
