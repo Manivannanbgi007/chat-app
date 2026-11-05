@@ -1,0 +1,14 @@
+package com.chatapp.auth.enums;
+
+public enum AuditAction {
+    REGISTERED,
+    EMAIL_VERIFIED,
+    LOGIN_SUCCESS,
+    LOGIN_FAILED,
+    ACCOUNT_LOCKED,
+    TOKEN_REUSE_DETECTED,
+    LOGOUT,
+    SESSION_REVOKED,
+    PASSWORD_RESET_REQUESTED,
+    PASSWORD_RESET
+}

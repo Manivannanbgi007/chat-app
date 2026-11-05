@@ -1,0 +1,22 @@
+# Prod profile (also used inside Docker Compose): no localhost defaults.
+# A missing environment variable makes the service fail at startup.
+spring:
+  datasource:
+    url: ${MEDIA_DB_URL}
+    username: ${MEDIA_DB_USERNAME}
+    password: ${MEDIA_DB_PASSWORD}
+
+chatapp:
+  s3:
+    endpoint: ${S3_ENDPOINT}
+    public-endpoint: ${S3_PUBLIC_ENDPOINT}
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
+logging:
+  level:
+    com.chatapp: INFO

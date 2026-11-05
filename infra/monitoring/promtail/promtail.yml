@@ -1,0 +1,35 @@
+# Promtail: reads the logs of the chat-app containers through the Docker API and sends them to Loki.
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml     # where it stopped reading (lost on restart: a few lines may be sent twice)
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: chat-app-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        # only the containers of this Compose project (not other projects on the same machine)
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=chat-app"]
+    relabel_configs:
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: service
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: container
+    pipeline_stages:
+      # Our log lines look like:  2026-11-05 10:15:30.123 INFO  [correlation-id] c.c.user.SomeClass - message
+      # "level" becomes a label (few different values, good for filtering). The correlation id stays in the line:
+      # search it with   {service=~".+"} |= "the-id"   to follow one request through every service.
+      - regex:
+          # (the gateway prints the time as 2026-11-05T10:15:30.123Z, the others as 2026-11-05 10:15:30.123)
+          expression: '^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}\.\d{3}Z?\s+(?P<level>[A-Z]+)\s'
+      - labels:
+          level:

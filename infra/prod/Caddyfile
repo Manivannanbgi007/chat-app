@@ -1,0 +1,43 @@
+# Caddy: HTTPS in front of chat-app. {$DOMAIN} comes from infra/.env.prod.
+# Certificates are requested from Let's Encrypt automatically (ports 80 and 443 must be reachable from the internet
+# and the DNS names {$DOMAIN} and files.{$DOMAIN} must point to this server).
+{
+	# one line from infra/.env.prod: "email you@example.com" (Let's Encrypt contact), or "local_certs" for a test on
+	# your own computer (certificates from Caddy's own authority; the browser will warn)
+	{$CADDY_GLOBAL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# REST and WebSocket go straight to the gateway. Caddy replaces any X-Forwarded-For the client sent and sets the
+	# real address, which the gateway uses for its rate limits.
+	@api path /api/* /ws /ws/*
+	handle @api {
+		reverse_proxy api-gateway:8200 {
+			flush_interval -1
+			transport http {
+				response_header_timeout 170s   # uploads of up to 100 MB on a slow line
+			}
+		}
+	}
+
+	# everything else: the web app
+	handle {
+		reverse_proxy frontend:8080
+	}
+}
+
+# Self-hosted object storage (RustFS): browsers load photos, videos and documents through short-lived signed links.
+# Not needed when you use Amazon S3 or another provider: then remove this block and the "s3" service.
+files.{$DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	reverse_proxy s3:9000 {
+		flush_interval -1
+	}
+}

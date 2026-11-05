@@ -1,0 +1,4 @@
+# Dev profile: service runs from the IDE, infrastructure runs in Docker (ports from infra/docker-compose.infra.yml).
+logging:
+  level:
+    com.chatapp: DEBUG

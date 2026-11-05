@@ -1,0 +1,381 @@
+# FULL stack: infrastructure + every service + frontend, all in containers.
+#   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build
+#
+# Containers talk to each other by service name (mysql, redis, kafka, auth-service, ...),
+# never by localhost. Only the gateway and the frontend are published to your computer;
+# the microservices are reachable only inside the Docker network.
+
+name: chat-app
+
+# Phase 9 hardening for every Java service container:
+#  - all Linux capabilities dropped (a web service needs none), no way to get new privileges
+#  - read-only root file system (only /tmp is writable, and it lives in memory)
+x-service-hardening: &service-hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  tmpfs: ["/tmp:size=64m"]
+
+include:
+  - docker-compose.infra.yml
+
+services:
+  api-gateway:
+    build:
+      context: ../services/api-gateway
+    container_name: chat-api-gateway
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      AUTH_SERVICE_URL: http://auth-service:8201
+      USER_SERVICE_URL: http://user-service:8202
+      CONVERSATION_SERVICE_URL: http://conversation-service:8203
+      MESSAGE_SERVICE_URL: http://message-service:8204
+      MESSAGE_SERVICE_WS_URL: ws://message-service:8204
+      MEDIA_SERVICE_URL: http://media-service:8205
+      PRESENCE_SERVICE_URL: http://presence-service:8207
+      NOTIFICATION_SERVICE_URL: http://notification-service:8206
+      CALL_SERVICE_URL: http://call-signaling-service:8208
+      STATUS_SERVICE_URL: http://status-service:8209
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGINS:-http://localhost:5280,http://localhost:5210}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    ports:
+      - "8200:8200"
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      conversation-service:
+        condition: service_healthy
+      message-service:
+        condition: service_healthy
+      media-service:
+        condition: service_healthy
+      presence-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      call-signaling-service:
+        condition: service_healthy
+      status-service:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [chat-net]
+
+  auth-service:
+    build:
+      context: ../services/auth-service
+    container_name: chat-auth-service
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      AUTH_DB_URL: jdbc:mysql://mysql:3306/auth_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      AUTH_DB_USERNAME: auth_user
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MAIL_HOST: ${MAIL_HOST:-mailhog}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@chatapp.local}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:5280}   # used in the password-reset link
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+        required: false      # production has no MailHog (real SMTP server), see docker-compose.prod.yml
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [chat-net]
+
+  user-service:
+    build:
+      context: ../services/user-service
+    container_name: chat-user-service
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      USER_DB_URL: jdbc:mysql://mysql:3306/user_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      USER_DB_USERNAME: user_user
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [chat-net]
+
+  conversation-service:
+    build:
+      context: ../services/conversation-service
+    container_name: chat-conversation-service
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CONVERSATION_DB_URL: jdbc:mysql://mysql:3306/conversation_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      CONVERSATION_DB_USERNAME: conversation_user
+      CONVERSATION_DB_PASSWORD: ${CONVERSATION_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      USER_SERVICE_URL: http://user-service:8202
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [chat-net]
+
+  message-service:
+    build:
+      context: ../services/message-service
+    container_name: chat-message-service
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MESSAGE_DB_URL: jdbc:mysql://mysql:3306/message_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      MESSAGE_DB_USERNAME: message_user
+      MESSAGE_DB_PASSWORD: ${MESSAGE_DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      CONVERSATION_SERVICE_URL: http://conversation-service:8203
+      USER_SERVICE_URL: http://user-service:8202
+      MEDIA_SERVICE_URL: http://media-service:8205
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      CORS_ALLOWED_ORIGINS: ${PUBLIC_ORIGINS:-http://localhost:5280,http://localhost:5210}   # browser origins allowed to open a WebSocket
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 640m
+    networks: [chat-net]
+
+  media-service:
+    build:
+      context: ../services/media-service
+    container_name: chat-media-service
+    <<: *service-hardening
+    read_only: false   # large uploads are buffered on disk, not in memory
+    tmpfs: []
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MEDIA_DB_URL: jdbc:mysql://mysql:3306/media_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      MEDIA_DB_USERNAME: media_user
+      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD}
+      # The service uploads to the INTERNAL storage address; signed download links carry the PUBLIC address,
+      # because the link is opened by the user's browser (in production: the S3 / CDN address).
+      S3_ENDPOINT: http://s3:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9010}
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: chat-media
+      S3_CREATE_BUCKET: "true"   # local only; in production the bucket is created in advance
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      mysql:
+        condition: service_healthy
+      s3:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    networks: [chat-net]
+
+  presence-service:
+    build:
+      context: ../services/presence-service
+    container_name: chat-presence-service
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      USER_SERVICE_URL: http://user-service:8202
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      PRESENCE_TTL_SECONDS: "60"
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+    networks: [chat-net]
+
+  notification-service:
+    build:
+      context: ../services/notification-service
+    container_name: chat-notification-service
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      NOTIFICATION_DB_URL: jdbc:mysql://mysql:3306/notification_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      NOTIFICATION_DB_USERNAME: notification_user
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CONVERSATION_SERVICE_URL: http://conversation-service:8203
+      USER_SERVICE_URL: http://user-service:8202
+      PRESENCE_SERVICE_URL: http://presence-service:8207
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [chat-net]
+
+  call-signaling-service:
+    build:
+      context: ../services/call-signaling-service
+    container_name: chat-call-signaling-service
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      CALL_DB_URL: jdbc:mysql://mysql:3306/call_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      CALL_DB_USERNAME: call_user
+      CALL_DB_PASSWORD: ${CALL_DB_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      USER_SERVICE_URL: http://user-service:8202
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      TURN_SECRET: ${TURN_SECRET:?TURN_SECRET is missing in infra/.env}
+      TURN_PUBLIC_HOST: ${TURN_PUBLIC_HOST:-localhost}   # the address BROWSERS use for STUN/TURN (Coturn's published port), not "coturn"
+      TURN_PORT: "3478"
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [chat-net]
+
+  # Status / stories (Phase 8): only MySQL and two other services (contacts and profiles from user-service,
+  # files from media-service). No Redis, no Kafka.
+  status-service:
+    build:
+      context: ../services/status-service
+    container_name: chat-status-service
+    <<: *service-hardening
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      STATUS_DB_URL: jdbc:mysql://mysql:3306/status_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      STATUS_DB_USERNAME: status_user
+      STATUS_DB_PASSWORD: ${STATUS_DB_PASSWORD:?STATUS_DB_PASSWORD is missing in infra/.env}
+      USER_SERVICE_URL: http://user-service:8202
+      MEDIA_SERVICE_URL: http://media-service:8205
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}   # true for local use; the production env file sets false
+    depends_on:
+      mysql:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [chat-net]
+
+  frontend:
+    build:
+      context: ../frontend
+    container_name: chat-frontend
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID]   # nginx entrypoint writes its config and drops to user nginx
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    environment:
+      # Browsers may load signed files from this address (it goes into the Content-Security-Policy)
+      S3_PUBLIC_ORIGIN: ${S3_PUBLIC_ENDPOINT:-http://localhost:9010}
+    ports:
+      - "5280:8080"
+    depends_on:
+      - api-gateway
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+    networks: [chat-net]

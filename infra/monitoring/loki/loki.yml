@@ -1,0 +1,41 @@
+# Loki: stores the logs. Single process, files on a volume: enough for one server.
+# For several servers use S3 storage and the "distributed" setup (see Grafana Loki docs).
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 168h          # keep logs for 7 days
+  allow_structured_metadata: true
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true         # actually delete logs older than retention_period
+  delete_request_store: filesystem
+
+analytics:
+  reporting_enabled: false

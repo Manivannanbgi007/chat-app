@@ -1,0 +1,53 @@
+# Virus scanning for uploads (Phase 9). Add it to the stack:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.clamav.yml --env-file infra/.env up -d
+#
+# media-service then sends every uploaded file to ClamAV BEFORE it is stored and refuses infected files
+# (400 MALWARE_DETECTED). If ClamAV is down, uploads are refused with 503 (fail closed).
+# ClamAV needs about 1.5 GB of memory (it keeps all virus signatures in RAM) and downloads the signatures when it
+# starts for the first time (about a minute) and then keeps them up to date by itself. Production uses it (deploy.sh).
+
+name: chat-app
+
+services:
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: chat-clamav
+    restart: unless-stopped
+    environment:
+      # clamd refuses streams bigger than 25 MB by default; videos may be 100 MB
+      CLAMD_CONF_StreamMaxLength: 110M
+      CLAMD_CONF_MaxFileSize: 110M
+      CLAMD_CONF_MaxScanSize: 220M
+    volumes:
+      - clamav-signatures:/var/lib/clamav       # the downloaded virus signatures survive a restart
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]      # asks clamd "PING"; comes with the image
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s                         # first start: downloading the signatures
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE, FOWNER]   # the image's start script prepares the signature folder
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    networks: [chat-net]
+
+  media-service:
+    environment:
+      VIRUS_SCANNER: clamav
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+    depends_on:
+      clamav:
+        condition: service_healthy
+
+volumes:
+  clamav-signatures:
+
+networks:
+  chat-net:
+    name: chat-net
+    external: true

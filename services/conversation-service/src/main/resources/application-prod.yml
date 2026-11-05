@@ -1,0 +1,23 @@
+# Prod profile (also used inside Docker Compose): no localhost defaults.
+# A missing environment variable makes the service fail at startup.
+spring:
+  datasource:
+    url: ${CONVERSATION_DB_URL}
+    username: ${CONVERSATION_DB_USERNAME}
+    password: ${CONVERSATION_DB_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+
+chatapp:
+  user-service:
+    url: ${USER_SERVICE_URL}
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
+logging:
+  level:
+    com.chatapp: INFO

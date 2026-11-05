@@ -1,0 +1,279 @@
+server:
+  port: 8200
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    # Lets you run from the IDE: reads passwords from infra/.env if the file exists.
+    # (Run the service from its own folder, services/api-gateway.)
+    import: "optional:file:../../infra/.env[.properties]"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6391}
+      password: ${REDIS_PASSWORD}
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 3000
+            response-timeout: 30s
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5210}
+                allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+                allowed-headers: "*"
+                exposed-headers: X-Correlation-Id
+                allow-credentials: true
+                max-age: 3600
+          default-filters:
+            # Keep the original Host header so Swagger shows the gateway address.
+            - PreserveHostHeader
+            # The gateway and the service both set X-Correlation-Id; send the client only one.
+            - DedupeResponseHeader=X-Correlation-Id, RETAIN_FIRST
+            # Security headers on every response (nosniff, X-Frame-Options, Referrer-Policy, HSTS ...). Phase 9.
+            - SecureHeaders
+          # The gateway only answers JSON, so no Content-Security-Policy here (it would also break Swagger UI in
+          # development). The page-level CSP is sent by the frontend's nginx.
+          filter:
+            secure-headers:
+              disable: content-security-policy
+              strict-transport-security: max-age=31536000; includeSubDomains
+          # One route per microservice. Routes are added as each service is built.
+          #  - Every HTTP route has its OWN circuit breaker, so one broken service cannot block the others.
+          #  - The WebSocket route has NO circuit breaker and NO time limit: a socket lives for hours,
+          #    a time limit would cut it after 30 seconds.
+          #  - Rate limits: replenishRate = requests per second that are refilled, burstCapacity = how many may
+          #    arrive at once. Exceeding it returns 429.
+          #  - ORDER MATTERS: the message routes under /api/conversations/... must come before conversation-service.
+          routes:
+            - id: auth-service
+              uri: ${AUTH_SERVICE_URL:http://localhost:8201}
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: authBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.auth.replenish-rate:2}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.auth.burst-capacity:10}
+            - id: user-service
+              uri: ${USER_SERVICE_URL:http://localhost:8202}
+              predicates:
+                - Path=/api/users/**,/api/contacts/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: userBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.api.replenish-rate:20}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.api.burst-capacity:40}
+            - id: message-service
+              uri: ${MESSAGE_SERVICE_URL:http://localhost:8204}
+              predicates:
+                - Path=/api/messages/**,/api/conversations/*/messages,/api/conversations/*/read
+              filters:
+                - name: CircuitBreaker
+                  args: { name: messageBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.messages.replenish-rate:30}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.messages.burst-capacity:60}
+            - id: conversation-service
+              uri: ${CONVERSATION_SERVICE_URL:http://localhost:8203}
+              predicates:
+                - Path=/api/conversations/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: conversationBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.api.replenish-rate:20}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.api.burst-capacity:40}
+            - id: presence-service
+              uri: ${PRESENCE_SERVICE_URL:http://localhost:8207}
+              predicates:
+                - Path=/api/presence/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: presenceBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.api.replenish-rate:20}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.api.burst-capacity:40}
+            - id: notification-service
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8206}
+              predicates:
+                - Path=/api/notifications/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: notificationBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.api.replenish-rate:20}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.api.burst-capacity:40}
+            # Calls (Phase 7). ICE candidates arrive in short bursts while a call connects: a higher limit than other APIs.
+            - id: call-signaling-service
+              uri: ${CALL_SERVICE_URL:http://localhost:8208}
+              predicates:
+                - Path=/api/calls/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: callBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.calls.replenish-rate:30}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.calls.burst-capacity:60}
+            # Status / stories (Phase 8): the normal per-user API limit.
+            - id: status-service
+              uri: ${STATUS_SERVICE_URL:http://localhost:8209}
+              predicates:
+                - Path=/api/statuses/**
+              filters:
+                - name: CircuitBreaker
+                  args: { name: statusBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.api.replenish-rate:20}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.api.burst-capacity:40}
+            # Uploads can be up to 100 MB: this route has its own, longer limits (see chatapp.gateway.media-timeout-seconds
+            # and the response-timeout below) and a smaller rate limit (20 uploads at once, then 1 per second).
+            - id: media-service
+              uri: ${MEDIA_SERVICE_URL:http://localhost:8205}
+              predicates:
+                - Path=/api/media/**
+              metadata:
+                response-timeout: 150000
+                connect-timeout: 3000
+              filters:
+                - name: CircuitBreaker
+                  args: { name: mediaBreaker, fallbackUri: "forward:/fallback" }
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@userKeyResolver}"
+                    redis-rate-limiter.replenishRate: ${chatapp.ratelimit.media.replenish-rate:1}
+                    redis-rate-limiter.burstCapacity: ${chatapp.ratelimit.media.burst-capacity:20}
+            # WebSocket (STOMP). The token is checked inside the STOMP CONNECT frame by message-service.
+            - id: message-websocket
+              uri: ${MESSAGE_SERVICE_WS_URL:ws://localhost:8204}
+              predicates:
+                - Path=/ws/**
+            # Swagger: each service's OpenAPI JSON is reachable at /service-docs/<name>
+            - id: auth-service-docs
+              uri: ${AUTH_SERVICE_URL:http://localhost:8201}
+              predicates:
+                - Path=/service-docs/auth
+              filters:
+                - RewritePath=/service-docs/auth, /v3/api-docs
+            - id: user-service-docs
+              uri: ${USER_SERVICE_URL:http://localhost:8202}
+              predicates:
+                - Path=/service-docs/user
+              filters:
+                - RewritePath=/service-docs/user, /v3/api-docs
+            - id: conversation-service-docs
+              uri: ${CONVERSATION_SERVICE_URL:http://localhost:8203}
+              predicates:
+                - Path=/service-docs/conversation
+              filters:
+                - RewritePath=/service-docs/conversation, /v3/api-docs
+            - id: message-service-docs
+              uri: ${MESSAGE_SERVICE_URL:http://localhost:8204}
+              predicates:
+                - Path=/service-docs/message
+              filters:
+                - RewritePath=/service-docs/message, /v3/api-docs
+            - id: media-service-docs
+              uri: ${MEDIA_SERVICE_URL:http://localhost:8205}
+              predicates:
+                - Path=/service-docs/media
+              filters:
+                - RewritePath=/service-docs/media, /v3/api-docs
+            - id: presence-service-docs
+              uri: ${PRESENCE_SERVICE_URL:http://localhost:8207}
+              predicates:
+                - Path=/service-docs/presence
+              filters:
+                - RewritePath=/service-docs/presence, /v3/api-docs
+            - id: notification-service-docs
+              uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8206}
+              predicates:
+                - Path=/service-docs/notification
+              filters:
+                - RewritePath=/service-docs/notification, /v3/api-docs
+            - id: call-signaling-service-docs
+              uri: ${CALL_SERVICE_URL:http://localhost:8208}
+              predicates:
+                - Path=/service-docs/call
+              filters:
+                - RewritePath=/service-docs/call, /v3/api-docs
+            - id: status-service-docs
+              uri: ${STATUS_SERVICE_URL:http://localhost:8209}
+              predicates:
+                - Path=/service-docs/status
+              filters:
+                - RewritePath=/service-docs/status, /v3/api-docs
+
+chatapp:
+  gateway:
+    timeout-seconds: 30
+    media-timeout-seconds: 150   # uploads of up to 100 MB take longer than a normal request
+  security:
+    jwt-secret: ${JWT_SECRET}      # at least 32 characters, same value as auth-service and the other services
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+    urls:
+      - name: auth-service
+        url: /service-docs/auth
+      - name: user-service
+        url: /service-docs/user
+      - name: conversation-service
+        url: /service-docs/conversation
+      - name: message-service
+        url: /service-docs/message
+      - name: media-service
+        url: /service-docs/media
+      - name: presence-service
+        url: /service-docs/presence
+      - name: notification-service
+        url: /service-docs/notification
+      - name: call-signaling-service
+        url: /service-docs/call
+      - name: status-service
+        url: /service-docs/status
+
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # lets Prometheus compute p95 / p99 latency
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never

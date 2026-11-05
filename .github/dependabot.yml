@@ -1,0 +1,16 @@
+version: 2
+updates:
+  # Each service is its own Maven project, so each one is watched separately.
+  - { package-ecosystem: maven, directory: /services/api-gateway,            schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/auth-service,           schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/user-service,           schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/conversation-service,   schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/message-service,        schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/media-service,          schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/presence-service,       schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/notification-service,   schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/call-signaling-service, schedule: { interval: weekly } }
+  - { package-ecosystem: maven, directory: /services/status-service,         schedule: { interval: weekly } }
+  - { package-ecosystem: npm, directory: /frontend, schedule: { interval: weekly } }
+  - { package-ecosystem: github-actions, directory: /, schedule: { interval: monthly } }
+  - { package-ecosystem: docker, directory: /frontend, schedule: { interval: monthly } }

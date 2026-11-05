@@ -1,0 +1,104 @@
+# Monitoring and central logs (Phase 9). Start it NEXT TO the normal stack:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.monitoring.yml --env-file infra/.env up -d
+#
+#   Grafana     http://localhost:3390   (user "admin", password GRAFANA_ADMIN_PASSWORD from infra/.env)
+#   Prometheus  http://localhost:9190   (metrics, alert rules)
+#
+# Prometheus pulls /actuator/prometheus from every service every 15 s. Promtail reads the logs of all chat-app
+# containers and ships them to Loki; Grafana shows both (dashboard "chat-app overview").
+# Ports are not the defaults on purpose (other projects use those). Together these four containers need about 1 GB.
+
+name: chat-app
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: chat-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d       # keep 15 days of metrics
+      - --web.enable-lifecycle                  # lets you reload the rules with: curl -X POST localhost:9190/-/reload
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9190:9090"   # only this computer; reach it on a server through an SSH tunnel
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+    networks: [chat-net]
+
+  loki:
+    image: grafana/loki:3.5.1
+    container_name: chat-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./monitoring/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+    networks: [chat-net]
+
+  promtail:
+    image: grafana/promtail:3.5.1
+    container_name: chat-promtail
+    restart: unless-stopped
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - ./monitoring/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      # read-only access to the Docker API: Promtail needs it to find the containers and their log files
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    networks: [chat-net]
+
+  grafana:
+    image: grafana/grafana:12.0.2
+    container_name: chat-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is missing in infra/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3390:3000"   # only this computer; reach it on a server through an SSH tunnel
+    depends_on:
+      - prometheus
+      - loki
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    networks: [chat-net]
+
+volumes:
+  prometheus-data:
+  loki-data:
+  grafana-data:
+
+networks:
+  chat-net:
+    name: chat-net
+    external: true

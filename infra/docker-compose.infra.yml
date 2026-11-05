@@ -1,0 +1,203 @@
+# Infrastructure only (MySQL, Redis, Kafka, Kafka UI, S3 storage, MailHog, Coturn).
+# Use this when you run the Spring Boot services from your IDE.
+#   docker compose -f infra/docker-compose.infra.yml --env-file infra/.env up -d
+#
+# Host ports are deliberately NOT the defaults so they do not clash with other projects.
+
+name: chat-app
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: chat-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD}
+      USER_DB_PASSWORD: ${USER_DB_PASSWORD}
+      CONVERSATION_DB_PASSWORD: ${CONVERSATION_DB_PASSWORD}
+      MESSAGE_DB_PASSWORD: ${MESSAGE_DB_PASSWORD}
+      MEDIA_DB_PASSWORD: ${MEDIA_DB_PASSWORD}
+      NOTIFICATION_DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+      CALL_DB_PASSWORD: ${CALL_DB_PASSWORD}
+      STATUS_DB_PASSWORD: ${STATUS_DB_PASSWORD}
+      TZ: UTC
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+00:00
+    ports:
+      - "3330:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    networks: [chat-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: chat-redis
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    ports:
+      - "6391:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    networks: [chat-net]
+
+  kafka:
+    image: apache/kafka:4.0.0
+    container_name: chat-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9094,CONTROLLER://:9093
+      # INTERNAL = other containers (kafka:29092), EXTERNAL = your IDE (localhost:9094)
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 6
+    ports:
+      - "9094:9094"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:29092 > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+    networks: [chat-net]
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: chat-kafka-ui
+    restart: unless-stopped
+    environment:
+      KAFKA_CLUSTERS_0_NAME: chat-app
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "8290:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks: [chat-net]
+
+  # S3-compatible object storage for local development (stand-in for Amazon S3).
+  # MinIO no longer publishes Docker images, so RustFS is used. The services only use the
+  # plain S3 API (AWS SDK), so production just points at real AWS S3.
+  s3:
+    image: rustfs/rustfs:1.0.4@sha256:ed9210d6411d77ffceb70d94b964a3cb7d225983368bc25bebe01e995293dcc2
+    container_name: chat-s3
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "9010:9000"   # S3 API
+      - "9011:9001"   # web console
+    volumes:
+      - s3-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    networks: [chat-net]
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: chat-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # web UI to read OTP / verification emails
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+    networks: [chat-net]
+
+  # TURN / STUN server for calls (Phase 7). Browsers use it when they cannot reach each other directly; audio and
+  # video then flow through here. It is here (not in docker-compose.yml) so it also runs in IDE mode.
+  # Passwords are not stored: call-signaling-service hands out short-lived ones made with the same TURN_SECRET
+  # (TURN REST scheme, --use-auth-secret). Coturn reads no environment variables, so everything is on the command line.
+  #
+  # Production (Phase 9): set --external-ip=<public IP> (or public/private), publish the relay port range from a
+  # public host, add TLS (--cert / --pkey, port 5349 "turns:"), and refuse private peer addresses
+  # (--denied-peer-ip=10.0.0.0-10.255.255.255, 172.16.0.0-172.31.255.255, 192.168.0.0-192.168.255.255, ...) so the
+  # TURN server can never be used to reach internal services. Locally two browsers on this machine relay through the
+  # same Coturn, which works with the container's own address, so no --external-ip is set.
+  # To try calls from another device on your network, add --external-ip=<this computer's LAN IP>.
+  coturn:
+    image: coturn/coturn:4.6.3
+    container_name: chat-coturn
+    restart: unless-stopped
+    command:
+      - -n                                   # no config file: only the options below
+      - --log-file=stdout
+      - --listening-port=3478
+      - --realm=chat-app
+      - --use-auth-secret                    # TURN REST scheme: username "expiry:userId", password = HMAC(secret)
+      - --static-auth-secret=${TURN_SECRET:?TURN_SECRET is missing in infra/.env}
+      - --fingerprint
+      - --no-cli
+      - --no-tls                             # local only; production needs TLS (see above)
+      - --no-dtls
+      - --no-tcp-relay                       # relay UDP media only, never open TCP connections to other hosts
+      - --no-multicast-peers
+      - --min-port=49160
+      - --max-port=49200
+    ports:
+      - "3478:3478/udp"                      # STUN / TURN
+      - "3478:3478/tcp"                      # TURN over TCP (networks that block UDP)
+      - "49160-49200:49160-49200/udp"        # relay ports
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    networks: [chat-net]
+
+volumes:
+  mysql-data:
+  redis-data:
+  kafka-data:
+  s3-data:
+
+networks:
+  chat-net:
+    name: chat-net

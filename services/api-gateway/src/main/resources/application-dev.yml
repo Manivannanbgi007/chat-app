@@ -1,0 +1,5 @@
+# Dev profile: everything runs on localhost (services started from the IDE, infra in Docker).
+# Defaults in application.yml already point to localhost, so only logging differs here.
+logging:
+  level:
+    com.chatapp: DEBUG

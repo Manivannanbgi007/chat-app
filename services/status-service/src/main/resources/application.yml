@@ -1,0 +1,78 @@
+server:
+  port: 8209
+  shutdown: graceful
+
+spring:
+  application:
+    name: status-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    # Lets you run from the IDE: reads passwords from infra/.env if the file exists.
+    # (Run the service from its own folder, services/status-service.)
+    import: "optional:file:../../infra/.env[.properties]"
+  datasource:
+    url: ${STATUS_DB_URL:jdbc:mysql://localhost:3330/status_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${STATUS_DB_USERNAME:status_user}
+    password: ${STATUS_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # the database schema is owned by Flyway, Hibernate only checks it
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        type:
+          preferred_uuid_jdbc_type: CHAR   # UUIDs are stored as readable CHAR(36)
+  flyway:
+    enabled: true
+
+security:
+  jwt:
+    # Same secret as auth-service and api-gateway (at least 32 characters).
+    secret: ${JWT_SECRET}
+    issuer: chat-app-auth
+
+chatapp:
+  internal:
+    # Secret for calls to user-service and media-service (header X-Internal-Token).
+    token: ${INTERNAL_SERVICE_TOKEN}
+  services:
+    user-url: ${USER_SERVICE_URL:http://localhost:8202}
+    media-url: ${MEDIA_SERVICE_URL:http://localhost:8205}
+    connect-timeout-ms: 2000
+    read-timeout-ms: 3000
+  status:
+    lifetime-seconds: 86400     # a status is visible for 24 hours after it was posted
+    max-active: 30              # how many statuses one person may have at the same time
+    cleanup-interval-ms: 60000  # how often expired statuses (and their files) are deleted
+    cleanup-batch-size: 100     # rows per cleanup transaction
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # lets Prometheus compute p95 / p99 latency
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+logging:
+  pattern:
+    # %X{correlationId} is filled by CorrelationIdFilter
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{36} - %msg%n"

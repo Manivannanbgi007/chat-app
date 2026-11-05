@@ -1,0 +1,41 @@
+# Secrets
+.env
+*.env.local
+
+# Maven / Java
+target/
+*.class
+*.log
+hs_err_pid*
+
+# Node / frontend
+node_modules/
+dist/
+test-results/
+playwright-report/
+coverage/
+*.tsbuildinfo
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backups (contain private data)
+infra/backups/
+infra/.env.prod
+infra/.env.*
+!infra/.env.example
+!infra/.env.prod.example
+infra/load-test/data/
+infra/load-test/results/
+
+# local demo logins
+infra/DEMO_ACCOUNTS.md

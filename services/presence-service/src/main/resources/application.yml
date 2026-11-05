@@ -1,0 +1,66 @@
+server:
+  port: 8207
+  shutdown: graceful
+
+spring:
+  application:
+    name: presence-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    # Lets you run from the IDE: reads passwords from infra/.env if the file exists.
+    # (Run the service from its own folder, services/presence-service.)
+    import: "optional:file:../../infra/.env[.properties]"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6391}
+      password: ${REDIS_PASSWORD}
+      connect-timeout: 2s
+      timeout: 2s
+
+security:
+  jwt:
+    # Same secret as auth-service and api-gateway (at least 32 characters).
+    secret: ${JWT_SECRET}
+    issuer: chat-app-auth
+
+chatapp:
+  internal:
+    # Secret for calls between services (header X-Internal-Token). At least 24 characters.
+    token: ${INTERNAL_SERVICE_TOKEN}
+  user-service:
+    url: ${USER_SERVICE_URL:http://localhost:8202}
+    connect-timeout-ms: 2000
+    read-timeout-ms: 3000
+  presence:
+    # A device counts as online this many seconds after its last heartbeat (the app sends one every 20 s).
+    ttl-seconds: ${PRESENCE_TTL_SECONDS:60}
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # lets Prometheus compute p95 / p99 latency
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+logging:
+  pattern:
+    # %X{correlationId} is filled by CorrelationIdFilter
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{36} - %msg%n"

@@ -1,0 +1,64 @@
+# Alert rules. Prometheus shows them under "Alerts" (http://localhost:9190/alerts).
+# Sending e-mail / chat messages needs an Alertmanager; see DEPLOYMENT_GUIDE.md "Alerts".
+groups:
+  - name: chat-app
+    rules:
+      - alert: ServiceDown
+        expr: up{job="chat-services"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.instance }} does not answer"
+          description: "Prometheus could not read the metrics of {{ $labels.instance }} for 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          sum by (application) (rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            / sum by (application) (rate(http_server_requests_seconds_count[5m])) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.application }}: more than 5% of the requests fail (HTTP 5xx)"
+
+      - alert: SlowRequests
+        expr: |
+          histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket{uri!~"/actuator.*"}[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }}: 95% of the requests take longer than 1 second"
+
+      - alert: HeapAlmostFull
+        expr: sum by (application) (jvm_memory_used_bytes{area="heap"}) / sum by (application) (jvm_memory_max_bytes{area="heap"}) > 0.9
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }}: Java heap is over 90% full for 10 minutes"
+
+      - alert: DatabasePoolExhausted
+        expr: hikaricp_connections_active / hikaricp_connections_max > 0.9
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }}: over 90% of the database connections are in use"
+
+      - alert: DatabaseConnectionWaits
+        expr: rate(hikaricp_connections_timeout_total[5m]) > 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.application }}: requests time out while waiting for a database connection"
+
+      - alert: KafkaConsumerLag
+        expr: max by (application) (kafka_consumer_fetch_manager_records_lag_max) > 1000
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.application }}: a Kafka consumer is more than 1000 events behind"
+
+      - alert: GatewayRejectingManyRequests
+        expr: sum(rate(http_server_requests_seconds_count{application="api-gateway", status="429"}[5m])) > 5
+        for: 5m
+        labels: { severity: info }
+        annotations:
+          summary: "The gateway rate-limits more than 5 requests per second (busy client or attack)"

@@ -1,0 +1,30 @@
+# Prod profile (also used inside Docker Compose): no localhost defaults.
+# A missing environment variable makes the service fail at startup.
+spring:
+  datasource:
+    url: ${AUTH_DB_URL}
+    username: ${AUTH_DB_USERNAME}
+    password: ${AUTH_DB_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+
+chatapp:
+  frontend-base-url: ${FRONTEND_BASE_URL}
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
+logging:
+  level:
+    com.chatapp: INFO

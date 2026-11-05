@@ -1,0 +1,16 @@
+# Included by nginx.conf (see there). ${S3_PUBLIC_ORIGIN} is the address browsers use for the signed file links of
+# the object storage (http://localhost:9010 locally, the S3 / CDN address in production).
+#
+# Content-Security-Policy, in plain words:
+#   scripts only from this site (no inline scripts, no eval)       -> an injected <script> cannot run
+#   styles: this site + inline (React sets some style attributes)
+#   images / audio / video: this site, blob: (local previews and voice notes), data: (small inline images) and the storage
+#   connections (fetch, WebSocket): this site only (the WebSocket goes through nginx too)
+#   nobody may put this site in a frame; no <object>; forms only post to this site
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${S3_PUBLIC_ORIGIN}; media-src 'self' blob: ${S3_PUBLIC_ORIGIN}; connect-src 'self' ${S3_PUBLIC_ORIGIN}; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "no-referrer" always;
+# camera and microphone only for this site (calls, voice notes); nothing else a chat app does not need
+add_header Permissions-Policy "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()" always;
+add_header Cross-Origin-Opener-Policy "same-origin" always;

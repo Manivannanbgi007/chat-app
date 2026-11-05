@@ -1,0 +1,102 @@
+server:
+  port: 8201
+  shutdown: graceful
+
+spring:
+  application:
+    name: auth-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    # Lets you run from the IDE: reads passwords from infra/.env if the file exists.
+    # (Run the service from its own folder, services/auth-service.)
+    import: "optional:file:../../infra/.env[.properties]"
+  datasource:
+    url: ${AUTH_DB_URL:jdbc:mysql://localhost:3330/auth_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${AUTH_DB_USERNAME:auth_user}
+    password: ${AUTH_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # the database schema is owned by Flyway, Hibernate only checks it
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        type:
+          preferred_uuid_jdbc_type: CHAR   # UUIDs are CHAR(36) columns
+  flyway:
+    enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6391}
+      password: ${REDIS_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}   # MailHog in local development
+    # Real SMTP server in production (Phase 9): user name + password, and STARTTLS on port 587. MailHog needs none.
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS:false}
+      mail.smtp.starttls.required: ${MAIL_SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+
+chatapp:
+  security:
+    jwt-secret: ${JWT_SECRET}      # at least 32 characters, shared with the gateway and user-service
+    access-token-minutes: 15
+    refresh-token-days: 7
+    max-failed-logins: 5
+    lock-minutes: 15
+  otp:
+    valid-minutes: 10
+    max-attempts: 5
+    max-per-hour: 5
+    resend-seconds: 60
+  password-reset:
+    valid-minutes: 30
+    max-per-hour: 5
+  mail:
+    from: ${MAIL_FROM:no-reply@chatapp.local}
+  frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:5210}
+  outbox:
+    poll-ms: 500
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # lets Prometheus compute p95 / p99 latency
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+logging:
+  pattern:
+    # %X{correlationId} is filled by CorrelationIdFilter
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{36} - %msg%n"

@@ -1,0 +1,97 @@
+server:
+  port: 8206
+  shutdown: graceful
+
+spring:
+  application:
+    name: notification-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    # Lets you run from the IDE: reads passwords from infra/.env if the file exists.
+    # (Run the service from its own folder, services/notification-service.)
+    import: "optional:file:../../infra/.env[.properties]"
+  datasource:
+    url: ${NOTIFICATION_DB_URL:jdbc:mysql://localhost:3330/notification_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${NOTIFICATION_DB_USERNAME:notification_user}
+    password: ${NOTIFICATION_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # the database schema is owned by Flyway, Hibernate only checks it
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        type:
+          preferred_uuid_jdbc_type: CHAR   # UUIDs are stored as readable CHAR(36)
+  flyway:
+    enabled: true
+  data:
+    redis:
+      # Only used to publish live notifications to the browsers (channel ws.events)
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6391}
+      password: ${REDIS_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      # only used to copy broken events to the dead-letter topics
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+security:
+  jwt:
+    # Same secret as auth-service and api-gateway (at least 32 characters).
+    secret: ${JWT_SECRET}
+    issuer: chat-app-auth
+
+chatapp:
+  internal:
+    # Secret for calls to the other services (header X-Internal-Token). At least 24 characters.
+    token: ${INTERNAL_SERVICE_TOKEN}
+  services:
+    conversation-url: ${CONVERSATION_SERVICE_URL:http://localhost:8203}
+    user-url: ${USER_SERVICE_URL:http://localhost:8202}
+    presence-url: ${PRESENCE_SERVICE_URL:http://localhost:8207}
+    connect-timeout-ms: 2000
+    read-timeout-ms: 3000
+  names:
+    cache-minutes: 5   # how long a display name is remembered (so one message does not cost a user-service call)
+  push:
+    poll-ms: 5000      # how often the push job looks for due deliveries
+    max-attempts: 3    # after this many failed tries a push is marked DEAD
+    retry-delays-seconds: 10,60,300
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # lets Prometheus compute p95 / p99 latency
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+logging:
+  pattern:
+    # %X{correlationId} is filled by CorrelationIdFilter
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{36} - %msg%n"

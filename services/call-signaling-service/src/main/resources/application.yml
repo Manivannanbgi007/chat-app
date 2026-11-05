@@ -1,0 +1,99 @@
+server:
+  port: 8208
+  shutdown: graceful
+
+spring:
+  application:
+    name: call-signaling-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  config:
+    # Lets you run from the IDE: reads passwords from infra/.env if the file exists.
+    # (Run the service from its own folder, services/call-signaling-service.)
+    import: "optional:file:../../infra/.env[.properties]"
+  datasource:
+    url: ${CALL_DB_URL:jdbc:mysql://localhost:3330/call_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${CALL_DB_USERNAME:call_user}
+    password: ${CALL_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # the database schema is owned by Flyway, Hibernate only checks it
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        type:
+          preferred_uuid_jdbc_type: CHAR   # UUIDs are stored as readable CHAR(36)
+  flyway:
+    enabled: true
+  data:
+    redis:
+      # Only used to publish live call events to the browsers (channel ws.events, delivered by message-service)
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6391}
+      password: ${REDIS_PASSWORD}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+
+security:
+  jwt:
+    # Same secret as auth-service and api-gateway (at least 32 characters).
+    secret: ${JWT_SECRET}
+    issuer: chat-app-auth
+
+chatapp:
+  internal:
+    # Secret for calls to user-service (header X-Internal-Token).
+    token: ${INTERNAL_SERVICE_TOKEN}
+  services:
+    user-url: ${USER_SERVICE_URL:http://localhost:8202}
+    connect-timeout-ms: 2000
+    read-timeout-ms: 3000
+  calls:
+    ring-timeout-seconds: 30   # a call nobody answers becomes MISSED (NO_ANSWER) after this
+    ping-timeout-seconds: 30   # an accepted call ends (CONNECTION_LOST) when one side has not pinged for this long
+    timeout-check-ms: 1000     # how often the time-out job looks for such calls
+  turn:
+    # Shared with Coturn (--static-auth-secret). Used to make short-lived TURN passwords. At least 16 characters.
+    secret: ${TURN_SECRET}
+    # The address browsers use to reach the TURN server (not the Docker-internal name).
+    public-host: ${TURN_PUBLIC_HOST:localhost}
+    port: ${TURN_PORT:3478}
+    credential-ttl-seconds: 28800   # 8 hours: a TURN password must outlive the longest call
+  outbox:
+    poll-ms: 500
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:true}
+
+management:
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true   # lets Prometheus compute p95 / p99 latency
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+logging:
+  pattern:
+    # %X{correlationId} is filled by CorrelationIdFilter
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{correlationId:-}] %logger{36} - %msg%n"

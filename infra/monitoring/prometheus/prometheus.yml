@@ -1,0 +1,30 @@
+# Prometheus: which services to ask for metrics, and which alert rules to check.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Every Spring Boot service publishes its metrics at /actuator/prometheus (Micrometer).
+  # The label "application" comes from the metric itself (management.metrics.tags.application).
+  - job_name: chat-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - auth-service:8201
+          - user-service:8202
+          - conversation-service:8203
+          - message-service:8204
+          - media-service:8205
+          - notification-service:8206
+          - presence-service:8207
+          - call-signaling-service:8208
+          - status-service:8209
+          # the gateway is the only service reachable from outside, so its actuator lives on its own port 8290
+          - api-gateway:8290
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
