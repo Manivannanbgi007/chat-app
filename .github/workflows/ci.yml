@@ -87,7 +87,7 @@ jobs:
         with:
           fetch-depth: 0          # the secret scan also reads the history
       - name: Secrets in the code or history
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Vulnerable dependencies in the repository (Maven and npm lock files)
