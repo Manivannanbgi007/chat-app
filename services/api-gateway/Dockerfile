@@ -39,9 +39,11 @@ USER app
 EXPOSE 8200
 # The gateway is the one service that is reachable from outside. Its actuator endpoints (health, metrics) are
 # therefore moved to a second port (8290) that is never published; port 8200 only serves the API.
+# --enable-native-access: Netty (the web server of the gateway) loads its native Linux network library. Java 24+ warns
+# about that at startup and later Java versions will block it unless it is allowed here.
 ENV SPRING_PROFILES_ACTIVE=prod \
     MANAGEMENT_SERVER_PORT=8290 \
-    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Dsun.net.inetaddr.ttl=5 -Dsun.net.inetaddr.negative.ttl=1"
+    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Dsun.net.inetaddr.ttl=5 -Dsun.net.inetaddr.negative.ttl=1 --enable-native-access=ALL-UNNAMED"
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
   CMD wget -qO- http://localhost:8290/actuator/health/readiness | grep -q UP || exit 1
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
