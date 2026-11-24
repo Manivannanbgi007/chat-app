@@ -19,7 +19,7 @@
     <description>chat-app Call Signaling Service: one-to-one call state, busy handling, WebRTC signaling relay, TURN credentials, call history</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <springdoc.version>3.0.3</springdoc.version>
     </properties>
 
