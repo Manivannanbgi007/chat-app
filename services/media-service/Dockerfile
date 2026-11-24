@@ -2,8 +2,8 @@
 # Three stages: (1) build the jar and split it into layers, (2) make a small Java runtime with only the Java modules
 # the app needs (jlink), (3) put both on a minimal Alpine image that runs as a normal user, not root.
 
-# ---- Stage 1: build the jar (Maven + JDK 21) and split it into layers ----
-FROM maven:3.9-eclipse-temurin-21 AS build
+# ---- Stage 1: build the jar (Maven + JDK 25) and split it into layers ----
+FROM maven:3.9-eclipse-temurin-25 AS build
 WORKDIR /build
 COPY pom.xml .
 # Download dependencies first so Docker can cache this layer until pom.xml changes.
@@ -18,7 +18,7 @@ RUN java -Djarmode=tools -jar target/*.jar extract --layers --destination /build
  && mv /build/layers/application/*.jar /build/layers/application/app.jar
 
 # ---- Stage 2: a Java runtime with only the modules we need ----
-FROM eclipse-temurin:21-jdk-alpine AS jre
+FROM eclipse-temurin:25-jdk-alpine AS jre
 RUN jlink --strip-debug --no-man-pages --no-header-files --compress=zip-6 --output /jre \
     --add-modules java.base,java.compiler,java.sql.rowset,jdk.charsets,jdk.jfr,jdk.httpserver,java.logging,java.sql,java.naming,java.management,java.xml,java.desktop,java.instrument,java.net.http,java.prefs,java.rmi,java.scripting,java.security.jgss,java.security.sasl,java.transaction.xa,jdk.unsupported,jdk.crypto.ec,jdk.management,jdk.net,jdk.naming.dns,jdk.zipfs
 
