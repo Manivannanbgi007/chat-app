@@ -2,8 +2,8 @@
 # Three stages: (1) build the jar and split it into layers, (2) make a small Java runtime with only the Java modules
 # the app needs (jlink), (3) put both on a minimal Alpine image that runs as a normal user, not root.
 
-# ---- Stage 1: build the jar (Maven + JDK 21) and split it into layers ----
-FROM maven:3.9-eclipse-temurin-21 AS build
+# ---- Stage 1: build the jar (Maven + JDK 25) and split it into layers ----
+FROM maven:3.9-eclipse-temurin-25 AS build
 WORKDIR /build
 COPY pom.xml .
 # Download dependencies first so Docker can cache this layer until pom.xml changes.
@@ -18,7 +18,7 @@ RUN java -Djarmode=tools -jar target/*.jar extract --layers --destination /build
  && mv /build/layers/application/*.jar /build/layers/application/app.jar
 
 # ---- Stage 2: a Java runtime with only the modules we need ----
-FROM eclipse-temurin:21-jdk-alpine AS jre
+FROM eclipse-temurin:25-jdk-alpine AS jre
 RUN jlink --strip-debug --no-man-pages --no-header-files --compress=zip-6 --output /jre \
     --add-modules java.base,java.compiler,java.sql.rowset,jdk.charsets,jdk.jfr,jdk.httpserver,java.logging,java.sql,java.naming,java.management,java.xml,java.desktop,java.instrument,java.net.http,java.prefs,java.rmi,java.scripting,java.security.jgss,java.security.sasl,java.transaction.xa,jdk.unsupported,jdk.crypto.ec,jdk.management,jdk.net,jdk.naming.dns,jdk.zipfs
 
@@ -39,9 +39,11 @@ USER app
 EXPOSE 8200
 # The gateway is the one service that is reachable from outside. Its actuator endpoints (health, metrics) are
 # therefore moved to a second port (8290) that is never published; port 8200 only serves the API.
+# --enable-native-access: Netty (the web server of the gateway) loads its native Linux network library. Java 24+ warns
+# about that at startup and later Java versions will block it unless it is allowed here.
 ENV SPRING_PROFILES_ACTIVE=prod \
     MANAGEMENT_SERVER_PORT=8290 \
-    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Dsun.net.inetaddr.ttl=5 -Dsun.net.inetaddr.negative.ttl=1"
+    JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Dsun.net.inetaddr.ttl=5 -Dsun.net.inetaddr.negative.ttl=1 --enable-native-access=ALL-UNNAMED"
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
   CMD wget -qO- http://localhost:8290/actuator/health/readiness | grep -q UP || exit 1
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

@@ -3,7 +3,7 @@
 For developers new to the project. Read `ARCHITECTURE.md` first for the big picture.
 
 ## 1. Prerequisites
-Java 21, Maven 3.9+, Node 24+, Docker Desktop. See `DOCKER_SETUP.md` to start the infrastructure.
+Java 25, Maven 3.9+, Node 24+, Docker Desktop. See `DOCKER_SETUP.md` to start the infrastructure.
 
 ## 2. Repository map
 ```

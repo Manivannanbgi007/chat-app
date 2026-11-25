@@ -19,7 +19,7 @@
     <description>chat-app Auth Service: registration, login, JWT, refresh tokens, OTP, sessions</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <springdoc.version>3.0.3</springdoc.version>
         <mapstruct.version>1.6.3</mapstruct.version>
     </properties>

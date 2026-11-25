@@ -19,7 +19,7 @@
     <description>chat-app Presence Service: who is online, last seen (Redis only)</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>25</java.version>
         <springdoc.version>3.0.3</springdoc.version>
     </properties>
 

@@ -14,7 +14,7 @@ python infra/scripts/smoke-test.py
 Open http://localhost:5280 (frontend), http://localhost:8200/swagger-ui.html (API docs) and http://localhost:8025 (MailHog: verification codes and reset links arrive here). IDE mode and details: [DOCKER_SETUP.md](DOCKER_SETUP.md). Coding rules: [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md). Tests: [TESTING_GUIDE.md](TESTING_GUIDE.md).
 
 ## Stack
-Java 21, Spring Boot, Spring Cloud Gateway, MySQL, Redis, Kafka, S3-compatible storage (RustFS locally), WebSocket/STOMP, React + TypeScript + Vite + Tailwind.
+Java 25, Spring Boot, Spring Cloud Gateway, MySQL, Redis, Kafka, S3-compatible storage (RustFS locally), WebSocket/STOMP, React + TypeScript + Vite + Tailwind.
 
 ## Design documents
 | Document | Content |

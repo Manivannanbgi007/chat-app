@@ -37,7 +37,7 @@ Rules of the picture:
 
 | Layer | Choice |
 |---|---|
-| Language/build | Java 21, Maven (one `pom.xml` per service) |
+| Language/build | Java 25, Maven (one `pom.xml` per service) |
 | Framework | Spring Boot (latest stable, pinned in Phase 1), Spring Security, Spring Data JPA, Spring Web, Spring WebSocket (STOMP), Spring Kafka, Spring Cloud Gateway |
 | Libraries | Lombok, MapStruct, Bean Validation, Flyway, springdoc-openapi, Resilience4j (gateway + REST clients), Micrometer |
 | Data | MySQL (db per service), Redis, Kafka (JSON), S3-compatible storage (RustFS locally, AWS S3 in production; MinIO no longer publishes Docker images) |
@@ -213,7 +213,7 @@ chat-app/
 | frontend (Docker) | 5280 |
 
 Infrastructure host ports: MySQL 3330, Redis 6391, Kafka 9094, Kafka UI 8290, S3 API 9010 / console 9011, MailHog SMTP 1025 / UI 8025.
-Pinned versions (Phase 1): Java 21, Spring Boot 4.0.9, Spring Cloud 2025.1.4 (the release train for Boot 4.0.x; Boot 4.1.x has no final Cloud release yet), springdoc 3.0.3.
+Pinned versions (Phase 1, Java moved from 21 to 25 later): Java 25, Spring Boot 4.0.9, Spring Cloud 2025.1.4 (the release train for Boot 4.0.x; Boot 4.1.x has no final Cloud release yet), springdoc 3.0.3.
 
 ## 9. Scaling and failure notes
 - All services are stateless except live socket connections; run N instances behind the gateway.

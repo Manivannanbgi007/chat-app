@@ -3,7 +3,7 @@
 Two ways to run chat-app locally. Both use the same `infra/.env` file.
 
 ## 0. One-time setup
-1. Install Docker Desktop, Java 21, Maven 3.9+, Node 24+.
+1. Install Docker Desktop, Java 25, Maven 3.9+, Node 24+.
 2. Create the environment file (random passwords are generated for you):
    ```bash
    bash infra/init-env.sh
