@@ -1,0 +1,17 @@
+# Settings for the secret scan (gitleaks) that runs in CI (.github/workflows/ci.yml, job "security").
+# gitleaks finds this file by itself because it is in the root of the repository.
+
+title = "chat-app gitleaks settings"
+
+# Use all of gitleaks' normal rules.
+[extend]
+useDefault = true
+
+# The tests use obviously fake keys and passwords (for example "test-secret-key-123456") for the throw-away
+# containers that Testcontainers starts. The "generic-api-key" rule reports them because they look like keys.
+# So: ignore only that one rule, and only in test folders (src/test/). Every other rule (AWS keys, private keys,
+# GitHub tokens, ...) still checks the test folders too. Never put a real secret in a test file.
+[[allowlists]]
+description = "Fake keys and passwords used by the tests"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)src/test/''']
