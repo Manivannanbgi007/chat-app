@@ -8,6 +8,7 @@ All 10 microservices now build, test and run on **Java 25**.
 
 - **What changed:** only Java version numbers (Maven, Docker, CI, docs) plus one JVM option for the gateway.
   No Java code, no tests, no dependency versions and no application configuration were changed.
+  Afterwards, one test-only setting was added to fix a test failure that already existed (section 5, issue 4).
 - **Why it was small:** the services already used Spring Boot 4.0.9. Every library version it manages
   (Lombok, Mockito, Hibernate, Kafka, Netty, Testcontainers, the Maven plugins) already supports Java 25.
 - **Result:** same 923 tests, all passing, identical coverage. The full stack in Docker passes
@@ -54,6 +55,7 @@ Each service was migrated, tested and committed on its own (one commit per servi
 | `services/*/Dockerfile` (10) | build image `maven:3.9-eclipse-temurin-21` → `-25`; jlink image `eclipse-temurin:21-jdk-alpine` → `25-jdk-alpine`; one comment |
 | `services/api-gateway/Dockerfile` | `JAVA_OPTS` gets `--enable-native-access=ALL-UNNAMED` (see section 5) |
 | `.github/workflows/ci.yml` | backend jobs use `java-version: "25"` |
+| `services/auth-service/src/test/resources/application-test.properties` | `management.health.mail.enabled=false` (test only, see section 5, issue 4) |
 | `README.md`, `ARCHITECTURE.md`, `DEVELOPMENT_GUIDE.md`, `DOCKER_SETUP.md` | "Java 21" → "Java 25" |
 | `JAVA_25_MIGRATION_REPORT.md` | this report |
 
@@ -101,7 +103,7 @@ mvn clean org.jacoco:jacoco-maven-plugin:0.8.16:prepare-agent verify org.jacoco:
 | 1 | **api-gateway prints a warning at startup on Java 25**: Netty loads its native Linux network library, and Java 24+ warns about native code (JEP 472). Later Java versions will block it unless it is allowed. | Yes (new in Java 24+) | Added `--enable-native-access=ALL-UNNAMED` to the gateway `JAVA_OPTS`. No behavior change: Java 25 already allows it, the option only makes it explicit. The warning is gone. |
 | 2 | Build log warning: Lombok calls `sun.misc.Unsafe::objectFieldOffset` while compiling (JEP 498). | Yes, but only at compile time | No action. It is in the compiler, not in the application. It will go away with a future Lombok release. |
 | 3 | Test log warning: JNA (used by Testcontainers to talk to Docker on Windows) loads native code. | Yes, but only in tests | No action. Not part of the application. |
-| 4 | `auth-service` test `SecurityRulesTest.publicEndpointsNeedNoToken` fails when nothing listens on `localhost:1025`. Spring's mail health check tries to reach MailHog, so `/actuator/health` is `DOWN`. | **No** – fails the same way on Java 21 | Not changed (out of scope). It passes when MailHog runs (the local Docker infra). GitHub Actions has no MailHog, so this test most likely fails in CI on `main` too. Suggested fix: add `management.health.mail.enabled=false` to `auth-service/src/test/resources/application-test.properties`. |
+| 4 | `auth-service` test `SecurityRulesTest.publicEndpointsNeedNoToken` fails when nothing listens on `localhost:1025`. Spring's mail health check tries to reach MailHog, so `/actuator/health` is `DOWN`. | **No** – fails the same way on Java 21 | **Fixed in a separate commit.** The tests never send real email (they use `FakeEmailService`), so the mail health check was only probing a server the tests do not need. Added `management.health.mail.enabled=false` to `auth-service/src/test/resources/application-test.properties`. Test profile only: production still checks the mail server. The test itself was not changed. Result without MailHog: 58 / 58 passed on Java 25 (before: 57 / 58). GitHub Actions has no MailHog, so this also fixes the CI job. |
 | 5 | `media-service` test `UploadFlowTest.programsAndScriptsAreRefusedWhateverTheyAreCalled` counts temp files in the shared system temp folder, so it fails if two media-service test runs happen at the same time on one machine. | **No** | Not changed. Passes when run alone (as in CI). |
 | 6 | Local machine only: `infra/mysql/init/01-create-databases.sh` had Windows (CRLF) line endings in the working copy, so MySQL could not run it (`/bin/bash^M: bad interpreter`) and every service got "Access denied". | **No** | Restored the file from git (git stores it with LF). Not a repository change. |
 | 7 | MapStruct warning "options not recognized: mapstruct.defaultComponentModel" in 4 services. | **No** – same on Java 21 | Not changed. |
