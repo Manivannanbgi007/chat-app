@@ -89,7 +89,7 @@ jobs:
       - name: Secrets in the code or history
         # Pinned to a commit ID, not a tag, for the same reason as the Trivy step below. To update: take the
         # commit ID of a newer release from https://github.com/gitleaks/gitleaks-action/releases and change the comment too.
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The settings in .gitleaks.toml need gitleaks 8.25 or newer (the action's own default, 8.24.3, ignores them)
