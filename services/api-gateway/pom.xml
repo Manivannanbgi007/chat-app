@@ -21,7 +21,7 @@
     <properties>
         <java.version>25</java.version>
         <!-- 2025.1.x is the Spring Cloud release train that matches Spring Boot 4.0.x -->
-        <spring-cloud.version>2025.1.4</spring-cloud.version>
+        <spring-cloud.version>2026.0.0</spring-cloud.version>
         <springdoc.version>3.0.3</springdoc.version>
     </properties>
 
